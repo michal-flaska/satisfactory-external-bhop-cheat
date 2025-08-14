@@ -56,7 +56,7 @@ edit the `config.ini` file.
 ## Videos
 
 - Normal bug recreation: https://youtu.be/6szJuAJ-xHI
-- Cheat in action: [in progress]
+- Cheat in action: https://youtu.be/ArtDfgGEQSM
 
 ## License
 
