@@ -15,11 +15,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="config.ini" />
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="cheat\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="config.ini" />
   </ItemGroup>
 </Project>
