@@ -7,3 +7,6 @@ And I thought it would be funny to automate this to go even faster. So here I am
 > [!NOTE]
 > Even tho this is not a cheat, It's still for educational purposes only.
 > Like always :D
+
+Video of me recreating the bug normally: https://youtu.be/6szJuAJ-xHI <br />
+Video of the cheat in work: 
