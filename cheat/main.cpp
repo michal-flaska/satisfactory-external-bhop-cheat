@@ -1,58 +1,95 @@
-#include <windows.h>    // For Windows API functions like SendInput, GetAsyncKeyState
+/*
+   I -> Michal Flaška (@pilot2254) created this program.
+   Although it was created for personal educational purposes and may seem simple to you, it's still mine.
+   Please have some respect and don't steal it, publish it as your own, or sell it.
+
+   Have a nice day!
+   - Mike
+*/
+
+/*
+   This program automates a specific key sequence for games.
+   Functionality:
+   1. Reads user-configurable key bindings and delays from a config.ini file.
+   2. Waits for the player to hold "Walk Forward" and "Sprint".
+   3. After a set delay, holds "Crouch" to slide.
+   4. After another delay, repeatedly presses "Jump" at a set interval.
+   5. Stops when the player releases Walk Forward or Sprint.
+
+   Core Concepts:
+   - Virtual-Key codes: numeric identifiers for keyboard keys used by the Windows API.
+   - SendInput: Windows function to simulate keyboard input at the system level.
+   - GetAsyncKeyState: Windows function to check the current state of a key (pressed or not).
+   - Configurable parameters loaded from an INI file.
+*/
+
+#include <windows.h>    // Required for SendInput, GetAsyncKeyState, and VK key codes
 #include <iostream>
-#include <fstream>      // For file reading
-#include <sstream>      // For stringstream (used to convert hex strings)
-#include <string>       // For std::string
-#include <thread>       // For std::this_thread::sleep_for
-#include <chrono>       // For std::chrono::milliseconds
-#include <map>          // For storing config key-value pairs
+#include <fstream>      // For reading files (config.ini)
+#include <sstream>      // For converting strings to numbers (e.g., hex to int)
+#include <string>
+#include <thread>
+#include <chrono>
+#include <map>          // For storing key=value pairs from the config file
 
-// ------------------------------------------------ CONFIG ------------------------------------------------
-
-// Store all configuration values in one place
+/* ------------------------- CONFIGURATION STRUCT -------------------------
+   This struct holds all the settings loaded from config.ini.
+   By using a struct, we group related data together for easier handling.
+*/
 struct Config {
-        UINT WalkForward;       // Virtual-Key code for walking forward (e.g., W)
-        UINT Sprint;            // Virtual-Key code for sprinting (e.g., Shift)
-        UINT Jump;              // Virtual-Key code for jumping (e.g., Space)
-        UINT Crouch;            // Virtual-Key code for crouching (e.g., Ctrl)
-        int DelayBeforeCrouch;  // Delay in milliseconds before holding crouch
-        int DelayBeforeJump;    // Delay in milliseconds before starting to spam jump
-        int JumpInterval;       // Interval between jump presses in milliseconds
+        UINT WalkForward;       // Virtual-Key code for the "Walk Forward" action
+        UINT Sprint;            // Virtual-Key code for the "Sprint" action
+        UINT Jump;              // Virtual-Key code for the "Jump" action
+        UINT Crouch;            // Virtual-Key code for the "Crouch" action
+        int DelayBeforeCrouch;  // Delay (ms) before crouch after walking+sprinting
+        int DelayBeforeJump;    // Delay (ms) before starting jump spam after crouch
+        int JumpInterval;       // Time (ms) between jump presses
 };
 
-// Global config instance
+/* Create a single global instance of Config called cfg */
 Config cfg;
 
-// ------------------------------------------------ HELPER FUNCTIONS ------------------------------------------------
-
-// Convert hex string (like "0x57") to UINT (Virtual-Key code)
+/* ------------------------- FUNCTION: HexStringToUINT -------------------------
+   Purpose:
+   - Converts a hexadecimal string (like "0x57") into an unsigned integer (UINT).
+   - This is necessary because Virtual-Key codes in config.ini are written in hex.
+*/
 UINT HexStringToUINT(const std::string& str) {
-        UINT val;
-        std::stringstream ss;
-        ss << std::hex << str;  // Convert string from hexadecimal
-        ss >> val;              // Store result in val
-        return val;
+        UINT val;               // Variable to store the converted number
+        std::stringstream ss;   // Stringstream object for parsing
+        ss << std::hex << str;  // Tell stringstream to read in hexadecimal mode
+        ss >> val;              // Extract the value into 'val'
+        return val;             // Return the result
 }
 
-// Load config values from config.ini
+/* ------------------------- FUNCTION: LoadConfig -------------------------
+   Purpose:
+   - Reads key bindings and delays from config.ini into the cfg struct.
+   Steps:
+   1. Open config.ini for reading.
+   2. Read each line, ignoring empty lines or comments (# at start).
+   3. Split the line into key and value (by '=').
+   4. Store key-value pairs in a std::map.
+   5. Convert strings to numbers and store in cfg.
+*/
 bool LoadConfig(const std::string& filename) {
-        std::ifstream file(filename);
-        if (!file.is_open()) return false;              // If file doesn't exist, return false
+        std::ifstream file(filename);           // Open config.ini
+        if (!file.is_open()) return false;      // If file can't be opened, fail
 
-        std::map<std::string, std::string> values;      // Temporary storage for key=value pairs
-        std::string line;
+        std::map<std::string, std::string> values;      // Temporary key-value storage
+        std::string line;                               // Current line from the file
 
-        // Read file line by line
+        // Read each line from the config file
         while (std::getline(file, line)) {
-                if (line.empty() || line[0] == '#') continue;   // Skip empty lines or comments
-                size_t eq = line.find('=');                     // Find '='
-                if (eq == std::string::npos) continue;          // Skip lines without '='
-                std::string key = line.substr(0, eq);           // Extract key
-                std::string value = line.substr(eq + 1);        // Extract value
+                if (line.empty() || line[0] == '#') continue;   // Skip empty lines and comments
+                size_t eq = line.find('=');                     // Find position of '='
+                if (eq == std::string::npos) continue;          // If no '=', skip line
+                std::string key = line.substr(0, eq);           // Text before '=' is the key
+                std::string value = line.substr(eq + 1);        // Text after '=' is the value
                 values[key] = value;                            // Store in map
         }
 
-        // Assign values to config struct
+        // Assign the loaded values to cfg struct, converting strings to numbers
         try {
                 cfg.WalkForward = HexStringToUINT(values.at("WalkForward"));
                 cfg.Sprint = HexStringToUINT(values.at("Sprint"));
@@ -63,72 +100,99 @@ bool LoadConfig(const std::string& filename) {
                 cfg.JumpInterval = std::stoi(values.at("JumpInterval"));
         }
         catch (...) {
-                return false; // If any key is missing or invalid, fail
+                return false;   // If any key is missing or invalid, fail
         }
-        return true;
+        return true;            // Config loaded successfully
 }
 
-// Press and hold a key using Windows API
+/* ------------------------- FUNCTION: HoldKey -------------------------
+   Purpose:
+   - Simulates pressing and holding a key using SendInput.
+   - This sends a "key down" event without releasing it.
+*/
 void HoldKey(UINT vk) {
-        INPUT input{};
-        input.type = INPUT_KEYBOARD;            // Specify that this is keyboard input
-        input.ki.wVk = vk;                      // Set Virtual-Key code
+        INPUT input{};                          // INPUT struct for SendInput
+        input.type = INPUT_KEYBOARD;            // Keyboard input
+        input.ki.wVk = vk;                      // Set the Virtual-Key code
         input.ki.dwFlags = 0;                   // 0 = key down
-        SendInput(1, &input, sizeof(INPUT));    // Send the input to Windows
+        SendInput(1, &input, sizeof(INPUT));    // Send event to Windows
 }
 
-// Release a previously held key
+/* ------------------------- FUNCTION: ReleaseKey -------------------------
+   Purpose:
+   - Simulates releasing a key that was previously pressed.
+*/
 void ReleaseKey(UINT vk) {
         INPUT input{};
         input.type = INPUT_KEYBOARD;
         input.ki.wVk = vk;
-        input.ki.dwFlags = KEYEVENTF_KEYUP; // Key release flag
+        input.ki.dwFlags = KEYEVENTF_KEYUP; // KEYEVENTF_KEYUP = key release
         SendInput(1, &input, sizeof(INPUT));
 }
 
-// Check if a key is currently being pressed
+/* ------------------------- FUNCTION: IsKeyPressed -------------------------
+   Purpose:
+   - Checks if a specific key is currently pressed down.
+   - Uses GetAsyncKeyState to check the high-order bit (0x8000).
+*/
 bool IsKeyPressed(UINT vk) {
-        return (GetAsyncKeyState(vk) & 0x8000) != 0; // 0x8000 mask checks high-order bit
+        return (GetAsyncKeyState(vk) & 0x8000) != 0;
 }
 
-// Press a key briefly (used for spamming jump)
+/* ------------------------- FUNCTION: PressKey -------------------------
+   Purpose:
+   - Presses a key for a short time (key down, wait, key up).
+   - Used for jump spamming.
+*/
 void PressKey(UINT vk, int durationMs) {
-        HoldKey(vk);                                                            // Press key down
+        HoldKey(vk);                                                            // Key down
         std::this_thread::sleep_for(std::chrono::milliseconds(durationMs));     // Wait
-        ReleaseKey(vk);                                                         // Release key
+        ReleaseKey(vk);                                                         // Key up
 }
 
-// ------------------------------------------------ MAIN LOOP ------------------------------------------------
+/* ------------------------- MAIN FUNCTION -------------------------
+   This is where the program starts executing.
+   Steps:
+   1. Load config file.
+   2. Continuously check for the activation keys (WalkForward + Sprint).
+   3. Perform crouch + jump spam when active.
+*/
 int main() {
-        if (!LoadConfig("config.ini")) {    // Load configuration at startup
+        // Load the configuration from config.ini
+        if (!LoadConfig("config.ini")) {
                 std::cerr << "[ERROR] Could not load config.ini\n";
-                return 1;
+                return 1; // Exit program with error code
         }
 
         std::cout << "[CONFIG LOADED]\n";
 
+        // Infinite loop: program runs until manually closed
         while (true) {
-                // Wait until WalkForward + Sprint are pressed
+                // Check if both WalkForward and Sprint are being pressed
                 if (IsKeyPressed(cfg.WalkForward) && IsKeyPressed(cfg.Sprint)) {
 
-                        std::this_thread::sleep_for(std::chrono::milliseconds(cfg.DelayBeforeCrouch));  // Wait before crouch
+                        // Wait before crouch (slide)
+                        std::this_thread::sleep_for(std::chrono::milliseconds(cfg.DelayBeforeCrouch));
 
-                        HoldKey(cfg.Crouch);                                                            // Start crouching/sliding
+                        // Hold crouch key
+                        HoldKey(cfg.Crouch);
 
-                        std::this_thread::sleep_for(std::chrono::milliseconds(cfg.DelayBeforeJump));    // Wait before jumping
+                        // Wait before starting jump spam
+                        std::this_thread::sleep_for(std::chrono::milliseconds(cfg.DelayBeforeJump));
 
-                        // Loop: spam jump while WalkForward + Sprint are held
+                        // Loop to spam jump while keys are held
                         while (IsKeyPressed(cfg.WalkForward) && IsKeyPressed(cfg.Sprint)) {
-                                PressKey(cfg.Jump, cfg.JumpInterval);                                   // Press jump
-                                std::this_thread::sleep_for(std::chrono::milliseconds(cfg.JumpInterval)); // Wait interval
+                                PressKey(cfg.Jump, cfg.JumpInterval); // Jump press
+                                std::this_thread::sleep_for(std::chrono::milliseconds(cfg.JumpInterval)); // Wait
                         }
 
-                        ReleaseKey(cfg.Crouch); // Stop crouching when loop ends
+                        // Release crouch when stopping
+                        ReleaseKey(cfg.Crouch);
                 }
 
-                // Small delay to prevent CPU overuse
+                // Small sleep to prevent CPU from maxing out
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
-        return 0;
+        return 0; // Program ends (never reached here in this design)
 }
