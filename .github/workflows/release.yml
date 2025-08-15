@@ -19,20 +19,24 @@ jobs:
       - name: Setup Visual Studio Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
       - name: Build project
         run: msbuild satisfactory-external-bhop-cheat.sln /p:Configuration=Release /p:Platform=x64
 
       - name: Copy config.ini to build output
-        run: |
-          copy config.ini x64\Release\config.ini
+        run: copy config.ini x64\Release\config.ini
 
       - name: Create ZIP package
-        run: |
-          powershell Compress-Archive -Path x64\Release\satisfactory-external-bhop-cheat.exe, x64\Release\config.ini -DestinationPath release.zip
+        run: powershell Compress-Archive -Path x64\Release\satisfactory-external-bhop-cheat.exe, x64\Release\config.ini -DestinationPath satisfactory-external-bhop-cheat-${{ env.VERSION }}.zip
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: release.zip
+          name: Release ${{ env.VERSION }}
+          tag_name: ${{ env.VERSION }}
+          files: satisfactory-external-bhop-cheat-${{ env.VERSION }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
